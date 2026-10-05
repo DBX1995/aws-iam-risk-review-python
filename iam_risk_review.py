@@ -1,14 +1,61 @@
 import boto3
 
-# Create a boto3 client for AWS IAM.
 iam = boto3.client("iam")
 
-# Retrieve up to 10 IAM roles from the AWS account.
-response = iam.list_roles(MaxItems=10)
+# Retrieve customer-managed IAM policies.
+response = iam.list_policies(
+    Scope="Local",
+    MaxItems=50
+)
 
-roles = response["Roles"]
+policies = response["Policies"]
 
-print(f"Retrieved {len(roles)} IAM roles:\n")
+print(f"Reviewing {len(policies)} customer-managed IAM policies...\n")
 
-for role in roles:
-    print(f"- {role['RoleName']}")
+
+def to_list(value):
+    """Convert a string or list value into a list."""
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+for policy in policies:
+    policy_name = policy["PolicyName"]
+    policy_arn = policy["Arn"]
+    version_id = policy["DefaultVersionId"]
+
+    version = iam.get_policy_version(
+        PolicyArn=policy_arn,
+        VersionId=version_id
+    )
+
+    document = version["PolicyVersion"]["Document"]
+    statements = document.get("Statement", [])
+
+    if isinstance(statements, dict):
+        statements = [statements]
+
+    findings = []
+
+    for statement in statements:
+        # Focus on permissions being allowed, not Deny statements.
+        if statement.get("Effect") != "Allow":
+            continue
+
+        actions = to_list(statement.get("Action", []))
+        resources = to_list(statement.get("Resource", []))
+
+        if "*" in actions:
+            findings.append('Allows wildcard Action: "*"')
+
+        if "*" in resources:
+            findings.append('Uses wildcard Resource: "*"')
+
+    if findings:
+        print(f"[REVIEW] {policy_name}")
+
+        for finding in findings:
+            print(f"  - {finding}")
+
+        print()
