@@ -46,12 +46,20 @@ for policy in policies:
         actions = to_list(statement.get("Action", []))
         resources = to_list(statement.get("Resource", []))
 
-        if "*" in actions:
-            findings.append('Allows wildcard Action: "*"')
+        # Detect unrestricted and service-wide wildcard actions.
+        for action in actions:
+            if action == "*":
+                findings.append('Allows unrestricted Action: "*"')
+            elif action.endswith(":*"):
+                findings.append(
+                    f'Allows service-wide wildcard Action: "{action}"'
+                )
 
+        # Detect wildcard resources.
         if "*" in resources:
             findings.append('Uses wildcard Resource: "*"')
 
+    # Display findings for each policy.
     if findings:
         print(f"[REVIEW] {policy_name}")
 
